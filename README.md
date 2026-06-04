@@ -1,6 +1,6 @@
 # N2KAndroid
 
-Android USB-host prototype for the Mastervolt 77030100 USB Interface and compatible Mastervolt HID gateways.
+Android USB-host prototype for enumerating NMEA 2000 bus devices through the Mastervolt 77030100 USB Interface and compatible Mastervolt HID gateways.
 
 The transport is ported from `C:\Gregor\Projects\NMEA2000Analyzer\MastervoltHidCapture.cs`:
 
@@ -9,7 +9,8 @@ The transport is ported from `C:\Gregor\Projects\NMEA2000Analyzer\MastervoltHidC
 - up to 4 packed CAN frames per report
 - 14-byte packed frame slots
 - 29-bit CAN ID packing/unpacking
-- ISO Request for PGN `126996` Product Information
+- ISO Requests for PGN `60928` Address Claim and PGN `126996` Product Information
+- Address-claim NAME decoding
+- Product-information fast-packet assembly and basic identity decoding
 
-This project intentionally has no checked-in Gradle wrapper. CI/CD should provide Gradle or inject the wrapper during its build step.
-
+CI/CD builds the checked-in Gradle wrapper and uploads a debug APK artifact.

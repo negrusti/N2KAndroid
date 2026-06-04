@@ -111,7 +111,15 @@ class MastervoltHidGateway(private val usbManager: UsbManager) : AutoCloseable {
     }
 
     fun requestProductInformation() {
-        writeReport(MastervoltProtocol.encodeProductInformationRequest(includeReportId = false))
+        requestPgn(MastervoltProtocol.PRODUCT_INFORMATION_PGN)
+    }
+
+    fun requestAddressClaim() {
+        requestPgn(MastervoltProtocol.ADDRESS_CLAIM_PGN)
+    }
+
+    fun requestPgn(pgn: UInt) {
+        writeReport(MastervoltProtocol.encodeIsoRequest(pgn, includeReportId = false))
     }
 
     fun writeReport(report: ByteArray) {

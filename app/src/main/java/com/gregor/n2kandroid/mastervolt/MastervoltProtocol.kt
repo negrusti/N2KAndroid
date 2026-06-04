@@ -10,9 +10,10 @@ object MastervoltProtocol {
     const val HID_REPORT_BUFFER_SIZE = 65
     const val MAX_PACKETS_PER_REPORT = 4
     const val PACKET_SIZE = 14
+    val ADDRESS_CLAIM_PGN = 60928u
+    val PRODUCT_INFORMATION_PGN = 126996u
 
     private val ISO_REQUEST_PGN = 59904u
-    private val PRODUCT_INFORMATION_PGN = 126996u
     private const val BROADCAST_ADDRESS = 255
     private const val REQUEST_SOURCE_ADDRESS = 254
     private const val REQUEST_PRIORITY = 6
@@ -50,6 +51,10 @@ object MastervoltProtocol {
     }
 
     fun encodeProductInformationRequest(includeReportId: Boolean): ByteArray {
+        return encodeIsoRequest(PRODUCT_INFORMATION_PGN, includeReportId)
+    }
+
+    fun encodeIsoRequest(requestedPgn: UInt, includeReportId: Boolean): ByteArray {
         val canId = CanBusUtilities.buildCanId(
             pgn = ISO_REQUEST_PGN,
             destination = BROADCAST_ADDRESS,
@@ -57,9 +62,9 @@ object MastervoltProtocol {
             priority = REQUEST_PRIORITY,
         )
         val payload = byteArrayOf(
-            (PRODUCT_INFORMATION_PGN and 0xFFu).toByte(),
-            ((PRODUCT_INFORMATION_PGN shr 8) and 0xFFu).toByte(),
-            ((PRODUCT_INFORMATION_PGN shr 16) and 0xFFu).toByte(),
+            (requestedPgn and 0xFFu).toByte(),
+            ((requestedPgn shr 8) and 0xFFu).toByte(),
+            ((requestedPgn shr 16) and 0xFFu).toByte(),
         )
         return encodeFrameReport(canId, payload, includeReportId)
     }

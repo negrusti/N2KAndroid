@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -17,16 +19,25 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.gregor.n2kandroid.mastervolt.MastervoltHidGateway
+import com.gregor.n2kandroid.nmea.BusDeviceRegistry
+import com.gregor.n2kandroid.nmea.DeviceInfoDecoder
+import com.gregor.n2kandroid.nmea.DiscoveredDevice
+import com.gregor.n2kandroid.nmea.FastPacketAssembler
+import com.gregor.n2kandroid.nmea.Nmea2000Frame
 
 class MainActivity : Activity() {
     private lateinit var usbManager: UsbManager
     private lateinit var gateway: MastervoltHidGateway
     private lateinit var statusText: TextView
-    private lateinit var logText: TextView
+    private lateinit var countText: TextView
+    private lateinit var deviceList: LinearLayout
     private lateinit var connectButton: Button
-    private lateinit var startButton: Button
+    private lateinit var discoverButton: Button
     private lateinit var requestButton: Button
-    private var capturedCount = 0
+
+    private val registry = BusDeviceRegistry()
+    private val fastPackets = FastPacketAssembler()
+    private var observedFrameCount = 0
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -68,61 +79,78 @@ class MainActivity : Activity() {
     private fun createUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
+            setPadding(dp(20), dp(18), dp(20), dp(16))
+            setBackgroundColor(0xFFF5F7F9.toInt())
         }
 
+        root.addView(TextView(this).apply {
+            text = "NMEA 2000 Devices"
+            textSize = 26f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFF17202A.toInt())
+        })
+
         statusText = TextView(this).apply {
-            textSize = 16f
             text = "Looking for Mastervolt HID gateway..."
+            textSize = 15f
+            setTextColor(0xFF3E4C59.toInt())
+            setPadding(0, dp(6), 0, dp(6))
         }
         root.addView(statusText)
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START
+            setPadding(0, dp(8), 0, dp(12))
         }
 
-        connectButton = Button(this).apply {
-            text = "Connect"
+        connectButton = styledButton("Connect").apply {
             setOnClickListener { connectOrRequestPermission() }
         }
         controls.addView(connectButton)
 
-        startButton = Button(this).apply {
-            text = "Start"
+        discoverButton = styledButton("Discover").apply {
             setOnClickListener {
                 if (gateway.isCapturing) {
-                    stopCapture()
+                    stopDiscovery()
                 } else {
-                    startCapture()
+                    startDiscovery(clearExisting = true)
                 }
             }
         }
-        controls.addView(startButton)
+        controls.addView(discoverButton)
 
-        requestButton = Button(this).apply {
-            text = "Request Info"
-            setOnClickListener { requestProductInformation() }
+        requestButton = styledButton("Refresh Info").apply {
+            setOnClickListener { requestDeviceInformation() }
         }
         controls.addView(requestButton)
 
-        Button(this).apply {
-            text = "Clear"
+        controls.addView(styledButton("Clear").apply {
             setOnClickListener {
-                capturedCount = 0
-                logText.text = ""
+                registry.clear()
+                fastPackets.clear()
+                observedFrameCount = 0
+                renderDevices(emptyList())
+                setStatus("Device list cleared.")
                 updateButtons()
             }
-            controls.addView(this)
-        }
+        })
         root.addView(controls)
 
-        logText = TextView(this).apply {
+        countText = TextView(this).apply {
             textSize = 13f
-            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(0xFF52616B.toInt())
+            text = "0 devices  |  0 frames observed"
         }
+        root.addView(countText)
+
+        deviceList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(10), 0, 0)
+        }
+
         root.addView(ScrollView(this).apply {
-            addView(logText)
+            addView(deviceList)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -131,6 +159,7 @@ class MainActivity : Activity() {
         })
 
         setContentView(root)
+        renderDevices(emptyList())
         updateButtons()
     }
 
@@ -167,65 +196,205 @@ class MainActivity : Activity() {
     private fun openDevice(device: UsbDevice) {
         try {
             gateway.open(device)
-            setStatus("Connected to Mastervolt HID gateway.")
+            setStatus("Connected. Start discovery to enumerate bus devices.")
         } catch (ex: Exception) {
             setStatus("Connect failed: ${ex.message}")
         }
         updateButtons()
     }
 
-    private fun startCapture() {
+    private fun startDiscovery(clearExisting: Boolean) {
+        if (clearExisting) {
+            registry.clear()
+            fastPackets.clear()
+            observedFrameCount = 0
+            renderDevices(emptyList())
+        }
+
         try {
             gateway.startCapture(
-                onFrame = { frame ->
-                    runOnUiThread {
-                        capturedCount += 1
-                        appendLog("#$capturedCount ${frame.summary()}")
-                        updateButtons()
-                    }
-                },
+                onFrame = { frame -> runOnUiThread { handleFrame(frame) } },
                 onError = { message ->
                     runOnUiThread {
-                        setStatus("Capture error: $message")
+                        setStatus("Discovery error: $message")
                         updateButtons()
                     }
                 },
             )
-            setStatus("Capturing NMEA 2000 frames...")
+            requestDeviceInformation()
+            setStatus("Listening for devices and collecting identity data...")
         } catch (ex: Exception) {
-            setStatus("Start failed: ${ex.message}")
+            setStatus("Discovery failed: ${ex.message}")
         }
         updateButtons()
     }
 
-    private fun stopCapture() {
+    private fun stopDiscovery() {
         gateway.stopCapture()
-        setStatus("Capture stopped.")
+        setStatus("Discovery stopped.")
         updateButtons()
     }
 
-    private fun requestProductInformation() {
+    private fun requestDeviceInformation() {
         try {
+            gateway.requestAddressClaim()
             gateway.requestProductInformation()
-            appendLog("Sent ISO Request for PGN 126996 Product Information.")
+            setStatus("Requested address claims and product information.")
         } catch (ex: Exception) {
             setStatus("Request failed: ${ex.message}")
         }
     }
 
-    private fun setStatus(message: String) {
-        statusText.text = "$message Captured: $capturedCount"
+    private fun handleFrame(frame: Nmea2000Frame) {
+        if (frame.source == REQUEST_SOURCE_ADDRESS) {
+            return
+        }
+
+        observedFrameCount += 1
+        var devices = registry.updateFromFrame(frame)
+
+        when (frame.pgn) {
+            DeviceInfoDecoder.ADDRESS_CLAIM_PGN -> {
+                DeviceInfoDecoder.decodeAddressClaim(
+                    address = frame.source,
+                    payload = frame.payload,
+                    nowMillis = frame.timestampMillis,
+                )?.let { devices = registry.merge(it) }
+            }
+
+            DeviceInfoDecoder.PRODUCT_INFORMATION_PGN -> {
+                val productPayload = fastPackets.process(frame)
+                if (productPayload != null) {
+                    DeviceInfoDecoder.decodeProductInformation(
+                        address = frame.source,
+                        payload = productPayload,
+                        nowMillis = frame.timestampMillis,
+                    )?.let { devices = registry.merge(it) }
+                }
+            }
+        }
+
+        renderDevices(devices)
+        updateButtons()
     }
 
-    private fun appendLog(line: String) {
-        val current = logText.text.toString()
-        logText.text = if (current.isEmpty()) line else "$line\n$current"
+    private fun renderDevices(devices: List<DiscoveredDevice>) {
+        deviceList.removeAllViews()
+
+        if (devices.isEmpty()) {
+            deviceList.addView(TextView(this).apply {
+                text = "No bus devices discovered yet."
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF52616B.toInt())
+                setPadding(0, dp(48), 0, 0)
+            })
+        } else {
+            devices.forEach { deviceList.addView(deviceRow(it)) }
+        }
+
+        countText.text = "${devices.size} devices  |  $observedFrameCount frames observed"
+    }
+
+    private fun deviceRow(device: DiscoveredDevice): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(0xFFFFFFFF.toInt(), 0xFFE0E6EB.toInt())
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(10)
+            }
+
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+
+                addView(TextView(context).apply {
+                    text = "%03d".format(device.address)
+                    textSize = 18f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFFFFFFFF.toInt())
+                    background = roundedBackground(0xFF0B6E69.toInt(), 0)
+                    layoutParams = LinearLayout.LayoutParams(dp(56), dp(38))
+                })
+
+                addView(TextView(context).apply {
+                    text = device.displayName
+                    textSize = 18f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(0xFF17202A.toInt())
+                    setPadding(dp(12), 0, 0, 0)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+            })
+
+            addView(TextView(context).apply {
+                text = device.details
+                textSize = 13f
+                setTextColor(0xFF52616B.toInt())
+                setPadding(0, dp(8), 0, 0)
+            })
+
+            addView(TextView(context).apply {
+                text = secondaryDetails(device)
+                textSize = 13f
+                setTextColor(0xFF52616B.toInt())
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
+    }
+
+    private fun secondaryDetails(device: DiscoveredDevice): String {
+        val identity = listOfNotNull(
+            device.softwareVersion?.let { "SW $it" },
+            device.modelVersion?.let { "Model version $it" },
+            device.serialCode?.let { "Serial $it" },
+            device.nmeaVersion?.takeIf { it.isNotBlank() }?.let { "NMEA $it" },
+            device.loadEquivalency?.let { "LEN $it" },
+        ).joinToString("  |  ")
+
+        return identity.ifBlank { "Frames observed: ${device.frameCount}" }
+    }
+
+    private fun styledButton(label: String): Button {
+        return Button(this).apply {
+            text = label
+            isAllCaps = false
+            minHeight = dp(44)
+            minimumHeight = dp(44)
+            setPadding(dp(10), 0, dp(10), 0)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(46),
+            ).apply {
+                rightMargin = dp(8)
+            }
+        }
+    }
+
+    private fun roundedBackground(fill: Int, stroke: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(8).toFloat()
+            setColor(fill)
+            if (stroke != 0) {
+                setStroke(dp(1), stroke)
+            }
+        }
+    }
+
+    private fun setStatus(message: String) {
+        statusText.text = message
     }
 
     private fun updateButtons() {
         connectButton.isEnabled = true
-        startButton.isEnabled = gateway.isOpen
-        startButton.text = if (gateway.isCapturing) "Stop" else "Start"
+        discoverButton.isEnabled = gateway.isOpen
+        discoverButton.text = if (gateway.isCapturing) "Stop" else "Discover"
         requestButton.isEnabled = gateway.isOpen
         statusText.visibility = View.VISIBLE
     }
@@ -234,6 +403,10 @@ class MainActivity : Activity() {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         return PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION), flags)
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     private inline fun <reified T> Intent.getParcelableExtraCompat(name: String): T? {
@@ -247,5 +420,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ACTION_USB_PERMISSION = "com.gregor.n2kandroid.USB_PERMISSION"
+        private const val REQUEST_SOURCE_ADDRESS = 254
     }
 }
