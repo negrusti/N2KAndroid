@@ -28,30 +28,20 @@ object DeviceInfoDecoder {
     }
 
     fun decodeProductInformation(address: Int, payload: ByteArray, nowMillis: Long): DiscoveredDevice? {
-        if (payload.size < 4) return null
+        if (payload.size < PRODUCT_INFO_MIN_LENGTH) return null
 
-        var offset = 0
-        val nmeaVersionRaw = readUInt16(payload, offset)
-        offset += 2
-        val productCode = readUInt16(payload, offset)
-        offset += 2
-
-        val modelId = readLauString(payload, offset).also { offset = it.nextOffset }.value
-        val softwareVersion = readLauString(payload, offset).also { offset = it.nextOffset }.value
-        val modelVersion = readLauString(payload, offset).also { offset = it.nextOffset }.value
-        val serialCode = readLauString(payload, offset).also { offset = it.nextOffset }.value
-
-        val loadEquivalency = if (offset + 1 < payload.size) payload[offset + 1].toInt() and 0xFF else null
+        val nmeaVersionRaw = readUInt16(payload, 0)
+        val productCode = readUInt16(payload, 2)
 
         return DiscoveredDevice(
             address = address,
             productCode = productCode,
-            modelId = modelId,
-            softwareVersion = softwareVersion,
-            modelVersion = modelVersion,
-            serialCode = serialCode,
+            modelId = readFixedString(payload, 4, PRODUCT_INFO_STRING_LENGTH),
+            softwareVersion = readFixedString(payload, 36, PRODUCT_INFO_STRING_LENGTH),
+            modelVersion = readFixedString(payload, 68, PRODUCT_INFO_STRING_LENGTH),
+            serialCode = readFixedString(payload, 100, PRODUCT_INFO_STRING_LENGTH),
             nmeaVersion = formatNmeaVersion(nmeaVersionRaw),
-            loadEquivalency = loadEquivalency,
+            loadEquivalency = payload[133].toInt() and 0xFF,
             lastSeenMillis = nowMillis,
         )
     }
@@ -60,21 +50,13 @@ object DeviceInfoDecoder {
         return (payload[offset].toInt() and 0xFF) or ((payload[offset + 1].toInt() and 0xFF) shl 8)
     }
 
-    private fun readLauString(payload: ByteArray, offset: Int): LauString {
-        if (offset >= payload.size) return LauString(null, offset)
-
-        val length = payload[offset].toInt() and 0xFF
-        if (length == 0 || length == 0xFF) return LauString(null, offset + 1)
-        if (offset + length > payload.size || length < 2) return LauString(null, payload.size)
-
-        val encoding = payload[offset + 1].toInt() and 0xFF
-        val bytes = payload.copyOfRange(offset + 2, offset + length)
-        val value = when (encoding) {
-            0, 1 -> bytes.toString(StandardCharsets.UTF_8)
-            else -> bytes.toString(StandardCharsets.ISO_8859_1)
-        }.trimEnd('\u0000', ' ')
-
-        return LauString(value.ifBlank { null }, offset + length)
+    private fun readFixedString(payload: ByteArray, offset: Int, length: Int): String? {
+        if (offset + length > payload.size) return null
+        val value = payload.copyOfRange(offset, offset + length)
+            .toString(StandardCharsets.ISO_8859_1)
+            .trimEnd('\u0000', '\u00FF', ' ')
+            .trim()
+        return value.ifBlank { null }
     }
 
     private fun formatNmeaVersion(raw: Int): String {
@@ -85,5 +67,6 @@ object DeviceInfoDecoder {
         }
     }
 
-    private data class LauString(val value: String?, val nextOffset: Int)
+    private const val PRODUCT_INFO_STRING_LENGTH = 32
+    private const val PRODUCT_INFO_MIN_LENGTH = 134
 }

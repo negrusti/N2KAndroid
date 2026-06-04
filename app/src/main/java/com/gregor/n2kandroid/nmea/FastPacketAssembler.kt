@@ -14,6 +14,7 @@ class FastPacketAssembler {
         if (frameIndex == 0) {
             if (frame.payload.size < 2) return null
             val totalLength = frame.payload[1].toInt() and 0xFF
+            if (totalLength == 0) return null
             val session = Session(totalLength)
             appendBytes(session, frame.payload, startIndex = 2)
             sessions[key] = session
@@ -21,7 +22,12 @@ class FastPacketAssembler {
         }
 
         val session = sessions[key] ?: return null
+        if (frameIndex != session.nextFrameIndex) {
+            sessions.remove(key)
+            return null
+        }
         appendBytes(session, frame.payload, startIndex = 1)
+        session.nextFrameIndex += 1
         return completeIfReady(key, session)
     }
 
@@ -46,6 +52,6 @@ class FastPacketAssembler {
 
     private class Session(val totalLength: Int) {
         val data = ArrayList<Byte>(totalLength)
+        var nextFrameIndex = 1
     }
 }
-
