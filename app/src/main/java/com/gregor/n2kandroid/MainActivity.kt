@@ -31,7 +31,6 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var countText: TextView
     private lateinit var deviceList: LinearLayout
-    private lateinit var connectButton: Button
     private lateinit var discoverButton: Button
     private lateinit var requestButton: Button
 
@@ -79,8 +78,17 @@ class MainActivity : Activity() {
     private fun createUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(16))
+            setPadding(dp(20), dp(28), dp(20), dp(16))
             setBackgroundColor(0xFFF5F7F9.toInt())
+            fitsSystemWindows = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                setOnApplyWindowInsetsListener { view, insets ->
+                    val topInset = insets.systemWindowInsetTop
+                    view.setPadding(dp(20), topInset + dp(16), dp(20), dp(16))
+                    insets
+                }
+                requestApplyInsets()
+            }
         }
 
         root.addView(TextView(this).apply {
@@ -103,11 +111,6 @@ class MainActivity : Activity() {
             gravity = Gravity.START
             setPadding(0, dp(8), 0, dp(12))
         }
-
-        connectButton = styledButton("Connect").apply {
-            setOnClickListener { connectOrRequestPermission() }
-        }
-        controls.addView(connectButton)
 
         discoverButton = styledButton("Discover").apply {
             setOnClickListener {
@@ -179,7 +182,7 @@ class MainActivity : Activity() {
     private fun connectOrRequestPermission() {
         val device = gateway.findDevice()
         if (device == null) {
-            setStatus("No Mastervolt HID gateway detected.")
+            setStatus("Attach the Mastervolt USB gateway to connect automatically.")
             updateButtons()
             return
         }
@@ -196,7 +199,7 @@ class MainActivity : Activity() {
     private fun openDevice(device: UsbDevice) {
         try {
             gateway.open(device)
-            setStatus("Connected. Start discovery to enumerate bus devices.")
+            setStatus("Connected. Discovery is ready.")
         } catch (ex: Exception) {
             setStatus("Connect failed: ${ex.message}")
         }
@@ -392,7 +395,6 @@ class MainActivity : Activity() {
     }
 
     private fun updateButtons() {
-        connectButton.isEnabled = true
         discoverButton.isEnabled = gateway.isOpen
         discoverButton.text = if (gateway.isCapturing) "Stop" else "Discover"
         requestButton.isEnabled = gateway.isOpen
