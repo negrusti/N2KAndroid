@@ -177,7 +177,7 @@ class MastervoltHidGateway(private val usbManager: UsbManager) : AutoCloseable {
         report: ByteArray,
     ): Boolean {
         val result = activeConnection.controlTransfer(
-            UsbConstants.USB_DIR_OUT or UsbConstants.USB_TYPE_CLASS or UsbConstants.USB_RECIP_INTERFACE,
+            UsbConstants.USB_DIR_OUT or UsbConstants.USB_TYPE_CLASS or USB_RECIP_INTERFACE,
             HID_SET_REPORT,
             HID_REPORT_TYPE_OUTPUT shl 8,
             usbInterface?.id ?: 0,
@@ -235,6 +235,7 @@ class MastervoltHidGateway(private val usbManager: UsbManager) : AutoCloseable {
     companion object {
         private const val HID_SET_REPORT = 0x09
         private const val HID_REPORT_TYPE_OUTPUT = 0x02
+        private const val USB_RECIP_INTERFACE = 0x01
         private const val WRITE_TIMEOUT_MS = 1_000
     }
 }
