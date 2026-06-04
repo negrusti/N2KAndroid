@@ -32,7 +32,6 @@ class MainActivity : Activity() {
     private lateinit var countText: TextView
     private lateinit var deviceList: LinearLayout
     private lateinit var discoverButton: Button
-    private lateinit var requestButton: Button
 
     private val registry = BusDeviceRegistry()
     private val fastPackets = FastPacketAssembler()
@@ -115,29 +114,13 @@ class MainActivity : Activity() {
         discoverButton = styledButton("Discover").apply {
             setOnClickListener {
                 if (gateway.isCapturing) {
-                    stopDiscovery()
+                    requestDeviceInformation()
                 } else {
                     startDiscovery(clearExisting = true)
                 }
             }
         }
         controls.addView(discoverButton)
-
-        requestButton = styledButton("Refresh Info").apply {
-            setOnClickListener { requestDeviceInformation() }
-        }
-        controls.addView(requestButton)
-
-        controls.addView(styledButton("Clear").apply {
-            setOnClickListener {
-                registry.clear()
-                fastPackets.clear()
-                observedFrameCount = 0
-                renderDevices(emptyList())
-                setStatus("Device list cleared.")
-                updateButtons()
-            }
-        })
         root.addView(controls)
 
         countText = TextView(this).apply {
@@ -229,12 +212,6 @@ class MainActivity : Activity() {
         } catch (ex: Exception) {
             setStatus("Discovery failed: ${ex.message}")
         }
-        updateButtons()
-    }
-
-    private fun stopDiscovery() {
-        gateway.stopCapture()
-        setStatus("Discovery stopped.")
         updateButtons()
     }
 
@@ -396,8 +373,7 @@ class MainActivity : Activity() {
 
     private fun updateButtons() {
         discoverButton.isEnabled = gateway.isOpen
-        discoverButton.text = if (gateway.isCapturing) "Stop" else "Discover"
-        requestButton.isEnabled = gateway.isOpen
+        discoverButton.text = if (gateway.isCapturing) "Refresh" else "Discover"
         statusText.visibility = View.VISIBLE
     }
 
