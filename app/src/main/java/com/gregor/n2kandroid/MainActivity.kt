@@ -24,6 +24,8 @@ import com.gregor.n2kandroid.nmea.DeviceInfoDecoder
 import com.gregor.n2kandroid.nmea.DiscoveredDevice
 import com.gregor.n2kandroid.nmea.FastPacketAssembler
 import com.gregor.n2kandroid.nmea.Nmea2000Frame
+import com.gregor.n2kandroid.nmea.PgnTrafficStat
+import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var usbManager: UsbManager
@@ -36,6 +38,7 @@ class MainActivity : Activity() {
     private val registry = BusDeviceRegistry()
     private val fastPackets = FastPacketAssembler()
     private var observedFrameCount = 0
+    private var expandedAddress: Int? = null
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -194,6 +197,7 @@ class MainActivity : Activity() {
             registry.clear()
             fastPackets.clear()
             observedFrameCount = 0
+            expandedAddress = null
             renderDevices(emptyList())
         }
 
@@ -281,6 +285,12 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = roundedBackground(0xFFFFFFFF.toInt(), 0xFFE0E6EB.toInt())
             setPadding(dp(14), dp(12), dp(14), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                expandedAddress = if (expandedAddress == device.address) null else device.address
+                renderDevices(registry.snapshot())
+            }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -325,6 +335,69 @@ class MainActivity : Activity() {
                 setTextColor(0xFF52616B.toInt())
                 setPadding(0, dp(4), 0, 0)
             })
+
+            if (expandedAddress == device.address) {
+                addView(pgnStatsSection(device.pgnStats))
+            }
+        }
+    }
+
+    private fun pgnStatsSection(stats: List<PgnTrafficStat>): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
+
+            addView(TextView(context).apply {
+                text = "PGNs sent"
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(0xFF17202A.toInt())
+            })
+
+            if (stats.isEmpty()) {
+                addView(TextView(context).apply {
+                    text = "No PGN traffic observed yet."
+                    textSize = 13f
+                    setTextColor(0xFF52616B.toInt())
+                    setPadding(0, dp(6), 0, 0)
+                })
+                return@apply
+            }
+
+            addView(pgnStatsHeader())
+            stats.forEach { addView(pgnStatsRow(it)) }
+        }
+    }
+
+    private fun pgnStatsHeader(): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, dp(4))
+            addView(statsCell("PGN", 1.1f, true))
+            addView(statsCell("Frames", 0.9f, true))
+            addView(statsCell("Bytes", 0.9f, true))
+            addView(statsCell("Avg", 0.8f, true))
+        }
+    }
+
+    private fun pgnStatsRow(stat: PgnTrafficStat): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(3), 0, dp(3))
+            addView(statsCell(stat.pgn.toString(), 1.1f, false))
+            addView(statsCell(stat.frameCount.toString(), 0.9f, false))
+            addView(statsCell(stat.byteCount.toString(), 0.9f, false))
+            addView(statsCell(String.format(Locale.US, "%.1f", stat.averagePayloadBytes), 0.8f, false))
+        }
+    }
+
+    private fun statsCell(value: String, weight: Float, header: Boolean): TextView {
+        return TextView(this).apply {
+            text = value
+            textSize = 12f
+            typeface = if (header) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            setTextColor(if (header) 0xFF3E4C59.toInt() else 0xFF52616B.toInt())
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight)
         }
     }
 

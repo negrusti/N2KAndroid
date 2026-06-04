@@ -17,6 +17,7 @@ data class DiscoveredDevice(
     val loadEquivalency: Int? = null,
     val lastSeenMillis: Long = 0L,
     val frameCount: Int = 0,
+    val pgnStats: List<PgnTrafficStat> = emptyList(),
 ) {
     val displayName: String
         get() = modelId?.takeIf { it.isNotBlank() }
@@ -30,4 +31,15 @@ data class DiscoveredDevice(
             deviceFunction?.let { "Function $it" },
             productCode?.let { "Product $it" },
         ).joinToString("  |  ").ifBlank { "Waiting for identity data" }
+}
+
+data class PgnTrafficStat(
+    val pgn: UInt,
+    val frameCount: Int,
+    val byteCount: Int,
+    val firstSeenMillis: Long,
+    val lastSeenMillis: Long,
+) {
+    val averagePayloadBytes: Double
+        get() = if (frameCount == 0) 0.0 else byteCount.toDouble() / frameCount
 }
