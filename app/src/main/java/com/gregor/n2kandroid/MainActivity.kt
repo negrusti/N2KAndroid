@@ -95,7 +95,7 @@ class MainActivity : Activity() {
 
         root.addView(TextView(this).apply {
             text = "NMEA 2000 Devices"
-            textSize = 26f
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(0xFF17202A.toInt())
         })
@@ -109,9 +109,8 @@ class MainActivity : Activity() {
         root.addView(statusText)
 
         val controls = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.START
-            setPadding(0, dp(8), 0, dp(12))
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(10))
         }
 
         discoverButton = styledButton("Discover").apply {
@@ -130,12 +129,13 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(0xFF52616B.toInt())
             text = "0 devices  |  0 frames observed"
+            setPadding(0, 0, 0, dp(2))
         }
         root.addView(countText)
 
         deviceList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(10), 0, 0)
+            setPadding(0, dp(8), 0, 0)
         }
 
         root.addView(ScrollView(this).apply {
@@ -320,6 +320,16 @@ class MainActivity : Activity() {
                     setPadding(dp(12), 0, 0, 0)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 })
+
+                addView(TextView(context).apply {
+                    text = if (expandedAddress == device.address) "Hide" else "Stats"
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(0xFF0B6E69.toInt())
+                    background = roundedBackground(0xFFE8F3F2.toInt(), 0)
+                    layoutParams = LinearLayout.LayoutParams(dp(54), dp(30))
+                })
             })
 
             addView(TextView(context).apply {
@@ -345,7 +355,14 @@ class MainActivity : Activity() {
     private fun pgnStatsSection(stats: List<PgnTrafficStat>): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(12), 0, 0)
+            background = roundedBackground(0xFFF6F8FA.toInt(), 0)
+            setPadding(dp(10), dp(10), dp(10), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(12)
+            }
 
             addView(TextView(context).apply {
                 text = "PGNs sent"
@@ -417,14 +434,15 @@ class MainActivity : Activity() {
         return Button(this).apply {
             text = label
             isAllCaps = false
+            textSize = 15f
             minHeight = dp(44)
             minimumHeight = dp(44)
             setPadding(dp(10), 0, dp(10), 0)
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(46),
             ).apply {
-                rightMargin = dp(8)
+                bottomMargin = dp(2)
             }
         }
     }
